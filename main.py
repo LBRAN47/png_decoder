@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 PNG_SIGNATURE = bytes([137, 80, 78, 71, 13, 10, 26, 10])
 IHDR = "IHDR".encode("ascii")
 PLTE = "PLTE".encode("ascii")
@@ -15,9 +17,53 @@ zTXt = "zTXt".encode("ascii")
 IEND = "IEND".encode("ascii")
 
 
+@dataclass
+class HDR:
+    width: int
+    height: int
+    bit_depth: int
+    color_type: int
+    comp_method: int
+    filt_method: int
+    interlace_method: int
 
 def parse_IHDR(data, length):
-    pass
+    if length != 13:
+        raise Exception("invalid length IHDR chunk")
+
+    width = int.from_bytes(data[:4])
+    height = int.from_bytes(data[4:8])
+
+    if not (0 < width < 2**31 and 0 < height < 2**31):
+        raise Exception("invalid width and height in IHDR")
+
+    bit_depth = data[8]
+    color_type = data[9]
+
+    if color_type == 0:
+        if bit_depth not in [1 << i for i in range(5)]:
+            raise Exception("invalid bit depth for color type 0 in IHDR")
+    elif color_type in [2, 4, 6]:
+        if bit_depth not in [8, 16]:
+            raise Exception(f"invalid bit depth for color type {color_type} in IHDR")
+    elif color_type == 3:
+        if bit_depth not in [1 << i for i in range(4)]:
+            raise Exception("invalid bit depth for color type 3 in IHDR")
+    else:
+        raise Exception("invalid color type in IHDR")
+
+    comp_method = data[10]
+    if comp_method != 0:
+        raise Exception("invalid compression method given in IHDR")
+    filt_method = data[11]
+    if filt_method != 0:
+        raise Exception("invalid filter method given in IHDR")
+    interlace_method = data[12]
+    if interlace_method not in [0, 1]:
+        raise Exception("invalid interlacing method given in IHDR")
+
+    return HDR(width, height, bit_depth, color_type, comp_method, filt_method,
+               interlace_method)
 
 def parse_PLTE(data, length):
     pass
@@ -98,7 +144,9 @@ def open_file(file):
             chunk_data = f.read(length)
 
             try:
-                parse_chunk[chunk_type](chunk_data, length)
+                ans = parse_chunk[chunk_type](chunk_data, length)
+                if ans:
+                    print(ans)
             except KeyError:
                 if chunk_type_critical(chunk_type):
                     raise Exception("Critical chunk not recognised")
